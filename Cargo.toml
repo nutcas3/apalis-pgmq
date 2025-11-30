@@ -1,0 +1,29 @@
+[package]
+name = "apalis-pgmq"
+version = "0.1.0"
+edition = "2024"
+authors = ["Nutcas3 <mauricee423@gmail.com>"]
+description = "PGMQ storage backend for Apalis"
+license = "MIT"
+repository = "https://github.com/apalis-dev/apalis-pgmq"
+keywords = ["apalis", "pgmq", "postgres", "message-queue", "background-jobs"]
+categories = ["asynchronous", "database"]
+
+[dependencies]
+apalis-core = "1.0.0-beta.2"
+pgmq = "0.31"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2.0.17"
+chrono = { version = "0.4", features = ["serde"] }
+futures = "0.3"
+async-stream = "0.3"
+tower = "0.5"
+
+[dev-dependencies]
+apalis = "1.0.0-beta.2"
+tokio = { version = "1", features = ["full"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[features]
+default = []
