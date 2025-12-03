@@ -2,8 +2,7 @@ use apalis_core::backend::Backend;
 use apalis_core::task::Task;
 use apalis_core::timer::sleep;
 use apalis_core::worker::context::WorkerContext;
-use async_stream::stream;
-use futures::stream::Stream;
+use futures::stream::{Stream, unfold};
 use pgmq::{Message as PgmqMessage, PGMQueue};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
@@ -51,7 +50,6 @@ where
             _phantom: PhantomData,
         })
     }
-
 
     pub fn with_visibility_timeout(mut self, timeout: std::time::Duration) -> Self {
         self.visibility_timeout = timeout;
@@ -118,45 +116,46 @@ where
         let visibility_timeout_secs = self.visibility_timeout.as_secs() as i32;
         let poll_interval = self.poll_interval;
 
-        Box::pin(stream! {
-            loop {
-                let result: Result<Option<PgmqMessage<T>>, _> = queue
-                    .read(&queue_name, Some(visibility_timeout_secs))
-                    .await;
+        let state = (queue, queue_name, visibility_timeout_secs, poll_interval);
 
-                match result {
-                    Ok(Some(msg)) => {
-                        let context = PgMqContext {
-                            msg_id: Some(msg.msg_id),
-                            read_ct: Some(msg.read_ct),
-                            enqueued_at: Some(msg.enqueued_at),
-                            vt: Some(msg.vt),
-                        };
+        Box::pin(unfold(state, |(queue, queue_name, visibility_timeout_secs, poll_interval)| async move {
+            let result: Result<Option<PgmqMessage<T>>, _> = queue
+                .read(&queue_name, Some(visibility_timeout_secs))
+                .await;
 
-                        let mut task = Task::new(msg.message);
-                        task.parts.ctx = context;
-                        task.parts.task_id = Some(apalis_core::task::task_id::TaskId::new(msg.msg_id));
-                        yield Ok(Some(task));
-                    }
-                    Ok(None) => {
-                        yield Ok(None);
-                        sleep(poll_interval).await;
-                    }
-                    Err(e) => {
-                        yield Err(PgMqError::Pgmq(e));
-                    }
+            let next_state = (queue, queue_name, visibility_timeout_secs, poll_interval);
+
+            match result {
+                Ok(Some(msg)) => {
+                    let context = PgMqContext {
+                        msg_id: Some(msg.msg_id),
+                        read_ct: Some(msg.read_ct),
+                        enqueued_at: Some(msg.enqueued_at),
+                        vt: Some(msg.vt),
+                    };
+
+                    let mut task = Task::new(msg.message);
+                    task.parts.ctx = context;
+                    task.parts.task_id = Some(apalis_core::task::task_id::TaskId::new(msg.msg_id));
+                    
+                    Some((Ok(Some(task)), next_state))
+                }
+                Ok(None) => {
+                    sleep(poll_interval).await;
+                    Some((Ok(None), next_state))
+                }
+                Err(e) => {
+                    Some((Err(PgMqError::Pgmq(e)), next_state))
                 }
             }
-        })
+        }))
     }
 
     fn heartbeat(&self, _worker: &WorkerContext) -> Self::Beat {
-        Box::pin(stream! {
-            loop {
-                sleep(std::time::Duration::from_secs(30)).await;
-                yield Ok(());
-            }
-        })
+        Box::pin(unfold((), |_| async {
+            sleep(std::time::Duration::from_secs(30)).await;
+            Some((Ok(()), ()))
+        }))
     }
 
     fn middleware(&self) -> Self::Layer {
