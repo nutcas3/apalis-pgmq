@@ -12,6 +12,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{PgMq, PgMqContext, PgMqError};
 
+/// Internal sink implementation for buffering PGMQ messages.
+///
+/// This struct manages the buffering and asynchronous sending of messages
+/// to the PGMQ queue.
 #[derive(Debug)]
 pub(super) struct PgMqSink<T> {
     items: VecDeque<Task<T, PgMqContext, i64>>,
@@ -36,6 +40,9 @@ impl<T> PgMqSink<T> {
     }
 }
 
+/// Represents a pending send operation.
+///
+/// This wraps a future that will complete when the message is sent to PGMQ.
 struct PendingSend {
     future: Pin<Box<dyn Future<Output = Result<i64, PgMqError>> + Send + 'static>>,
 }
