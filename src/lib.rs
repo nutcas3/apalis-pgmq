@@ -18,18 +18,10 @@
 )]
 #![doc = include_str!("../README.md")]
 
-mod ack;
 mod backend;
+mod config;
 mod errors;
-mod sink;
 
-use apalis_core::task::{task_id::TaskId, Task};
-
-pub use backend::{PgMq, PgMqContext};
+pub use backend::PgMqBackend;
+pub use config::Config;
 pub use errors::PgMqError;
-
-/// Type alias for a PGMQ task with context and i64 as the task ID type.
-pub type PgMqTask<T> = Task<T, PgMqContext, i64>;
-
-/// Type alias for a PGMQ task ID with i64 as the ID type.
-pub type PgMqTaskId = TaskId<i64>;
